@@ -1,0 +1,73 @@
+name: CI
+
+on:
+    push:
+        branches: [ 'main' ]
+    pull_request:
+
+permissions:
+    contents: read
+
+jobs:
+
+    tests:
+        name: Tests - PHP ${{ matrix.php }} ${{ matrix.dependency-version }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        strategy:
+            fail-fast: false
+            matrix:
+                # Laravel 13 requires PHP 8.3, PHP 8.2 runs the tests on Laravel 12
+                php: [ '8.2', '8.3', '8.4', '8.5' ]
+                dependency-version: [ '' ]
+                include:
+                    -   php: '8.2'
+                        dependency-version: '--prefer-lowest'
+        steps:
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+            -   name: Setup PHP
+                uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+                with:
+                    php-version: ${{ matrix.php }}
+                    coverage: none
+            -   name: Get Composer cache directory
+                id: composer-cache
+                run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+            -   name: Cache Composer dependencies
+                uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+                with:
+                    path: ${{ steps.composer-cache.outputs.dir }}
+                    key: php-${{ matrix.php }}${{ matrix.dependency-version }}-composer-${{ hashFiles('composer.json') }}
+                    restore-keys: php-${{ matrix.php }}${{ matrix.dependency-version }}-composer-
+            -   name: Install PHP dependencies
+                run: composer update ${{ matrix.dependency-version }} --prefer-dist --no-interaction
+            -   name: Tests
+                run: composer test:unit
+
+    checks:
+        name: Lint, types and type coverage
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+            -   name: Setup PHP
+                uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+                with:
+                    php-version: '8.5'
+                    coverage: none
+            -   name: Get Composer cache directory
+                id: composer-cache
+                run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+            -   name: Cache Composer dependencies
+                uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+                with:
+                    path: ${{ steps.composer-cache.outputs.dir }}
+                    key: php-8.5-composer-${{ hashFiles('composer.json') }}
+                    restore-keys: php-8.5-composer-
+            -   name: Install PHP dependencies
+                run: composer update --prefer-dist --no-interaction
+            -   name: Coding style
+                run: composer test:lint
+            -   name: Types
+                run: composer test:types
+

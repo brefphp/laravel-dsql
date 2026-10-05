@@ -1,0 +1,73 @@
+{
+    "name": "bref/laravel-dsql",
+    "description": "Aurora DSQL database driver for Laravel",
+    "keywords": ["laravel", "aurora", "dsql", "aws", "database", "postgresql", "serverless", "bref"],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Matthieu Napoli",
+            "email": "matthieu@mnapoli.fr"
+        }
+    ],
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/mnapoli"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Bref\\LaravelDsql\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Bref\\LaravelDsql\\Test\\": "tests/"
+        }
+    },
+    "require": {
+        "php": "^8.2",
+        "ext-pdo_pgsql": "*",
+        "aws/aws-sdk-php": "^3.339.1",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3",
+        "laravel/pint": "^1.24",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "phpstan/phpstan": "^2",
+        "phpstan/phpstan-phpunit": "^2",
+        "phpunit/phpunit": "^11.5 || ^12",
+        "rector/rector": "^2.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Bref\\LaravelDsql\\DsqlServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "lint": [
+            "pint --parallel",
+            "rector"
+        ],
+        "test:lint": [
+            "pint --parallel --test",
+            "rector --dry-run"
+        ],
+        "test:types": "phpstan",
+        "test:unit": "phpunit --testsuite=Unit",
+        "test:integration": "phpunit --testsuite=Integration",
+        "test": [
+            "@test:lint",
+            "@test:types",
+            "@test:unit"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
