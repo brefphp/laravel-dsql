@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bref\LaravelDsql\Test\Integration;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -107,6 +108,43 @@ final class QueriesTest extends IntegrationTestCase
         });
     }
 
+    /**
+     * PostgreSQL finds the rows of these by their `ctid`, which Aurora DSQL doesn't have.
+     */
+    public function test_updates_and_deletes_rows_with_joins_or_a_limit(): void
+    {
+        Schema::create('teams', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+        });
+        Schema::create('memberships', function (Blueprint $table): void {
+            $table->foreignId('team_id');
+            $table->foreignId('player_id');
+            $table->primary(['team_id', 'player_id']);
+        });
+        $team = Team::create(['name' => 'Bears']);
+        [$alice, $bob, $carol] = array_map(fn(string $name): Player => Player::create(['name' => $name]), ['Alice', 'Bob', 'Carol']);
+        $team->players()->attach([$alice->id, $bob->id]);
+        DB::table('memberships')->insert(['team_id' => $team->id + 1, 'player_id' => $carol->id]);
+
+        // Through a relation, which joins the pivot table
+        $team->players()->where('points', 0)->update(['active' => false]);
+        // An alias and a limit
+        DB::table('players as p')->where('p.active', true)->limit(1)->update(['points' => 3]);
+        // A primary key of several columns
+        DB::table('memberships')->where('team_id', $team->id)->orderBy('player_id')->limit(1)->delete();
+        Player::where('active', false)->orderByDesc('id')->limit(1)->delete();
+
+        $this->assertSame(
+            [['name' => 'Alice', 'active' => false, 'points' => 0], ['name' => 'Carol', 'active' => true, 'points' => 3]],
+            Player::orderBy('name')->get(['name', 'active', 'points'])->toArray(),
+        );
+        $this->assertSame(
+            [[$team->id, $bob->id], [$team->id + 1, $carol->id]],
+            DB::table('memberships')->orderBy('team_id')->get()->map(fn(object $membership): array => [$membership->team_id, $membership->player_id])->all(),
+        );
+    }
+
     protected function defineEnvironment($app): void
     {
         parent::defineEnvironment($app);
@@ -124,4 +162,21 @@ final class Player extends Model
 {
     protected $guarded = [];
     protected $casts = ['stats' => 'array', 'active' => 'boolean'];
+}
+
+/**
+ * @property int $id
+ */
+final class Team extends Model
+{
+    public $timestamps = false;
+    protected $guarded = [];
+
+    /**
+     * @return BelongsToMany<Player, $this>
+     */
+    public function players(): BelongsToMany
+    {
+        return $this->belongsToMany(Player::class, 'memberships');
+    }
 }

@@ -46,6 +46,32 @@ final class DsqlSchemaGrammar extends PostgresGrammar
     }
 
     /**
+     * The primary key of an Aurora DSQL table includes every other column of
+     * the table (`include`): only the key columns of an index are its columns.
+     *
+     * @param  string|null  $schema
+     * @param  string  $table
+     */
+    public function compileIndexes($schema, $table): string
+    {
+        return sprintf(
+            "select ic.relname as name, string_agg(a.attname, ',' order by indseq.ord) as columns, "
+            . 'am.amname as "type", i.indisunique as "unique", i.indisprimary as "primary" '
+            . 'from pg_index i '
+            . 'join pg_class tc on tc.oid = i.indrelid '
+            . 'join pg_namespace tn on tn.oid = tc.relnamespace '
+            . 'join pg_class ic on ic.oid = i.indexrelid '
+            . 'join pg_am am on am.oid = ic.relam '
+            . 'join lateral unnest(i.indkey) with ordinality as indseq(num, ord) on indseq.ord <= i.indnkeyatts '
+            . 'left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = indseq.num '
+            . 'where tc.relname = %s and tn.nspname = %s '
+            . 'group by ic.relname, am.amname, i.indisunique, i.indisprimary',
+            $this->quoteString($table),
+            $schema ? $this->quoteString($schema) : 'current_schema()',
+        );
+    }
+
+    /**
      * @param  Fluent<string, mixed>  $command
      */
     public function compileCreate(Blueprint $blueprint, Fluent $command): string
