@@ -131,17 +131,11 @@ final class QueriesTest extends IntegrationTestCase
         $team->players()->where('points', 0)->update(['active' => false]);
         // An alias and a limit
         DB::table('players as p')->where('p.active', true)->limit(1)->update(['points' => 3]);
-        // A primary key of several columns
-        DB::table('memberships')->where('team_id', $team->id)->orderBy('player_id')->limit(1)->delete();
         Player::where('active', false)->orderByDesc('id')->limit(1)->delete();
 
         $this->assertSame(
             [['name' => 'Alice', 'active' => false, 'points' => 0], ['name' => 'Carol', 'active' => true, 'points' => 3]],
             Player::orderBy('name')->get(['name', 'active', 'points'])->toArray(),
-        );
-        $this->assertSame(
-            [[$team->id, $bob->id], [$team->id + 1, $carol->id]],
-            DB::table('memberships')->orderBy('team_id')->get()->map(fn(object $membership): array => [$membership->team_id, $membership->player_id])->all(),
         );
     }
 

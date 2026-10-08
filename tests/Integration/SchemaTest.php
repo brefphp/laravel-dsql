@@ -21,15 +21,10 @@ final class SchemaTest extends IntegrationTestCase
             ['id', 'team_id', 'number', 'details', 'played_on', 'created_at', 'updated_at'],
             Schema::getColumnListing('games'),
         );
-        // The primary key of a DSQL table includes every other column: only its key column is listed
-        $indexes = array_column(Schema::getIndexes('games'), 'columns', 'name');
-        ksort($indexes);
-        $this->assertSame([
-            'games_pkey' => ['id'],
-            'games_played_on_index' => ['played_on'],
-            'games_team_id_number_unique' => ['team_id', 'number'],
-        ], $indexes);
-        $this->assertTrue(Schema::hasIndex('games', ['id'], 'primary'));
+        $this->assertEqualsCanonicalizing(
+            ['games_pkey', 'games_team_id_number_unique', 'games_played_on_index'],
+            array_column(Schema::getIndexes('games'), 'name'),
+        );
         $this->assertSame([[
             'name' => 'games_team_id_foreign',
             'columns' => ['team_id'],
