@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Bref\LaravelDsql\Test\Unit;
 
+use Bref\LaravelDsql\DsqlCacheStore;
 use Bref\LaravelDsql\DsqlConnection;
 use Bref\LaravelDsql\DsqlServiceProvider;
 use Composer\Autoload\ClassLoader;
+use Illuminate\Cache\DatabaseStore;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use LogicException;
@@ -14,6 +17,7 @@ use Orchestra\Testbench\Attributes\WithEnv;
 use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
+use ReflectionProperty;
 
 #[WithEnv('DB_HOST', 'abcdefghijklmnopqrstuvwxyz.dsql.eu-west-3.on.aws')]
 final class DsqlServiceProviderTest extends TestCase
@@ -48,6 +52,23 @@ final class DsqlServiceProviderTest extends TestCase
         $this->app?->register(DsqlServiceProvider::class, force: true);
 
         $this->assertSame($custom, Config::get('database.connections.dsql'));
+    }
+
+    public function test_runs_cache_increments_again_after_a_conflict_when_the_cache_is_in_aurora_dsql(): void
+    {
+        Config::set('cache.stores.database.connection', 'dsql');
+        Config::set('cache.stores.database.table', 'rate_limits');
+
+        $store = Cache::store('database')->getStore();
+
+        $this->assertInstanceOf(DsqlCacheStore::class, $store);
+        $this->assertSame(DB::connection('dsql'), $store->getConnection());
+        $this->assertSame('rate_limits', (new ReflectionProperty(DatabaseStore::class, 'table'))->getValue($store));
+    }
+
+    public function test_keeps_the_database_cache_store_of_other_databases(): void
+    {
+        $this->assertSame(DatabaseStore::class, Cache::store('database')->getStore()::class);
     }
 
     /**

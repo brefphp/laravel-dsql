@@ -22,16 +22,24 @@ final class ConflictingPdo extends PDO
         parent::__construct('sqlite::memory:');
     }
 
+    /**
+     * What Aurora DSQL reports when another transaction changed the same rows.
+     */
+    public static function conflict(): PDOException
+    {
+        $conflict = new PDOException('SQLSTATE[40001]: Serialization failure: 7 ERROR:  change conflicts with another transaction (OC000)');
+        $conflict->errorInfo = ['40001', 7, 'change conflicts with another transaction (OC000)'];
+        (new ReflectionProperty(PDOException::class, 'code'))->setValue($conflict, '40001');
+
+        return $conflict;
+    }
+
     public function exec(string $statement): int
     {
         $this->attempts++;
 
         if ($this->attempts <= $this->conflicts) {
-            $conflict = new PDOException('SQLSTATE[40001]: Serialization failure: 7 ERROR:  change conflicts with another transaction (OC000)');
-            $conflict->errorInfo = ['40001', 7, 'change conflicts with another transaction (OC000)'];
-            (new ReflectionProperty(PDOException::class, 'code'))->setValue($conflict, '40001');
-
-            throw $conflict;
+            throw self::conflict();
         }
 
         return 0;

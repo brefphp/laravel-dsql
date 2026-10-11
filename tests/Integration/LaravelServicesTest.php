@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bref\LaravelDsql\Test\Integration;
 
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
@@ -39,6 +40,20 @@ final class LaravelServicesTest extends IntegrationTestCase
         $this->assertSame(3, $cache->get('score'));
         $this->assertNull($cache->get('team'));
         $this->assertSame('Tigers', $cache->get('coach'));
+    }
+
+    /**
+     * The rate limiters of two requests increment the same counter.
+     */
+    public function test_increments_a_cached_counter_that_another_request_increments_at_the_same_time(): void
+    {
+        $cache = Cache::store('database');
+        $cache->put('attempts', 1, 60);
+
+        $this->changeConcurrently('for update', fn(Connection $otherRequest): int => $otherRequest->table('cache')->where('key', 'like', '%attempts')->update(['value' => serialize(2)]));
+
+        $this->assertSame(3, $cache->increment('attempts'));
+        $this->assertSame(3, $cache->get('attempts'));
     }
 
     public function test_locks_in_the_database(): void
