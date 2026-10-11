@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Bref\LaravelDsql\Test\Integration;
 
+use Illuminate\Bus\BatchRepository;
+use Illuminate\Bus\PendingBatch;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Artisan;
@@ -54,6 +56,24 @@ final class LaravelServicesTest extends IntegrationTestCase
 
         $this->assertSame(3, $cache->increment('attempts'));
         $this->assertSame(3, $cache->get('attempts'));
+    }
+
+    /**
+     * Two jobs of the same batch finish at the same time, on two queue workers.
+     */
+    public function test_counts_the_jobs_of_a_batch_that_another_job_finishes_at_the_same_time(): void
+    {
+        config()->set('queue.batching.database', 'dsql');
+        $app = $this->app;
+        $this->assertNotNull($app);
+        $batches = $app->make(BatchRepository::class);
+        $batch = $batches->store(new PendingBatch($app, collect()));
+        $batches->incrementTotalJobs($batch->id, 3);
+
+        $this->changeConcurrently('for update', fn(Connection $otherRequest): int => $otherRequest->table('job_batches')->where('id', $batch->id)->decrement('pending_jobs'));
+
+        $this->assertSame(1, $batches->decrementPendingJobs($batch->id, 'second-job')->pendingJobs);
+        $this->assertSame(1, $batches->find($batch->id)?->pendingJobs);
     }
 
     public function test_locks_in_the_database(): void

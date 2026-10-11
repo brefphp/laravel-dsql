@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Bref\LaravelDsql\Test\Unit;
 
+use Bref\LaravelDsql\DsqlBatchRepository;
 use Bref\LaravelDsql\DsqlCacheStore;
 use Bref\LaravelDsql\DsqlConnection;
 use Bref\LaravelDsql\DsqlServiceProvider;
 use Composer\Autoload\ClassLoader;
+use Illuminate\Bus\DatabaseBatchRepository;
 use Illuminate\Cache\DatabaseStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -69,6 +71,21 @@ final class DsqlServiceProviderTest extends TestCase
     public function test_keeps_the_database_cache_store_of_other_databases(): void
     {
         $this->assertSame(DatabaseStore::class, Cache::store('database')->getStore()::class);
+    }
+
+    public function test_counts_the_jobs_of_batches_again_after_a_conflict_when_they_are_in_aurora_dsql(): void
+    {
+        Config::set('queue.batching.database', 'dsql');
+
+        $batches = $this->app?->make(DatabaseBatchRepository::class);
+
+        $this->assertInstanceOf(DsqlBatchRepository::class, $batches);
+        $this->assertSame(DB::connection('dsql'), $batches->getConnection());
+    }
+
+    public function test_keeps_the_batches_of_other_databases(): void
+    {
+        $this->assertSame(DatabaseBatchRepository::class, $this->app?->make(DatabaseBatchRepository::class)::class);
     }
 
     /**

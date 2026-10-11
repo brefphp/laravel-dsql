@@ -7,6 +7,7 @@ namespace Bref\LaravelDsql;
 use Aws\Credentials\CredentialProvider;
 use Aws\DSQL\AuthTokenGenerator;
 use Closure;
+use Illuminate\Bus\DatabaseBatchRepository;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Cache\DatabaseStore;
 use Illuminate\Cache\Repository;
@@ -19,7 +20,7 @@ use PDO;
 /**
  * Registers the `dsql` database driver, and a `dsql` connection configured
  * from the environment, unless the application defines its own. The
- * `database` cache store handles Aurora DSQL's conflicts.
+ * `database` cache store and job batches handle Aurora DSQL's conflicts.
  */
 final class DsqlServiceProvider extends ServiceProvider
 {
@@ -51,6 +52,13 @@ final class DsqlServiceProvider extends ServiceProvider
 
                 return $repository;
             });
+        });
+
+        // Job batches stored in Aurora DSQL count their jobs again after a conflict
+        $this->app->extend(DatabaseBatchRepository::class, function (DatabaseBatchRepository $batches): DatabaseBatchRepository {
+            $connection = $batches->getConnection();
+
+            return $connection instanceof DsqlConnection ? new DsqlBatchRepository($batches, $connection) : $batches;
         });
     }
 }
