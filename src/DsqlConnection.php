@@ -7,6 +7,7 @@ namespace Bref\LaravelDsql;
 use Closure;
 use Illuminate\Database\PostgresConnection;
 use Illuminate\Database\QueryException;
+use Throwable;
 
 /**
  * An Aurora DSQL database. Queries are plain PostgreSQL, without savepoints,
@@ -36,6 +37,32 @@ final class DsqlConnection extends PostgresConnection
     }
 
     /**
+     * Runs a transaction again after a conflict, like a statement run outside
+     * of a transaction. For the transactions that Laravel opens itself with a
+     * single attempt, such as cache increments. Inside another transaction,
+     * the conflict is left to that transaction.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $transaction
+     * @return T
+     */
+    public function runAgainOnConflict(Closure $transaction): mixed
+    {
+        for ($attempt = 1;; $attempt++) {
+            try {
+                return $transaction();
+            } catch (Throwable $e) {
+                if ($attempt > self::CONFLICT_RETRIES || $this->transactions > 0 || ! $this->causedByConcurrencyError($e)) {
+                    throw $e;
+                }
+
+                $this->waitBeforeRetry($attempt);
+            }
+        }
+    }
+
+    /**
      * Aurora DSQL doesn't wait for concurrent transactions: it reports a
      * conflict (SQLSTATE 40001) instead, including with its own background
      * jobs on the tables, such as statistics. A statement run outside of a
@@ -48,7 +75,7 @@ final class DsqlConnection extends PostgresConnection
     protected function handleQueryException(QueryException $e, $query, $bindings, Closure $callback): mixed
     {
         for ($attempt = 1; $attempt <= self::CONFLICT_RETRIES && $this->transactions === 0 && $this->causedByConcurrencyError($e->getPrevious() ?? $e); $attempt++) {
-            usleep(random_int(10_000, 50_000) * $attempt);
+            $this->waitBeforeRetry($attempt);
 
             try {
                 return $this->runQueryCallback($query, $bindings, $callback);
@@ -58,5 +85,13 @@ final class DsqlConnection extends PostgresConnection
         }
 
         return parent::handleQueryException($e, $query, $bindings, $callback);
+    }
+
+    /**
+     * A random delay, so that the requests that conflicted don't conflict again.
+     */
+    private function waitBeforeRetry(int $attempt): void
+    {
+        usleep(random_int(10_000, 50_000) * $attempt);
     }
 }

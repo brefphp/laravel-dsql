@@ -7,6 +7,7 @@ namespace Bref\LaravelDsql\Test\Unit;
 use Bref\LaravelDsql\DsqlConnection;
 use Illuminate\Database\QueryException;
 use PDO;
+use PDOException;
 use PHPUnit\Framework\TestCase;
 
 final class DsqlConnectionTest extends TestCase
@@ -64,6 +65,39 @@ final class DsqlConnectionTest extends TestCase
         }
 
         $this->assertSame(1, $pdo->attempts);
+    }
+
+    public function test_runs_a_transaction_again_after_a_conflict(): void
+    {
+        $connection = new DsqlConnection(new PDO('sqlite::memory:'));
+        $transaction = new ConflictingTransaction(conflicts: 3);
+
+        $this->assertSame('committed', $connection->runAgainOnConflict($transaction(...)));
+        $this->assertSame(4, $transaction->attempts);
+    }
+
+    public function test_gives_up_on_a_transaction_after_three_conflicts(): void
+    {
+        $connection = new DsqlConnection(new PDO('sqlite::memory:'));
+
+        $this->expectException(PDOException::class);
+        $this->expectExceptionMessage('change conflicts with another transaction');
+
+        $connection->runAgainOnConflict((new ConflictingTransaction(conflicts: 4))(...));
+    }
+
+    public function test_leaves_conflicts_in_a_transaction_to_the_outer_transaction(): void
+    {
+        $connection = new DsqlConnection(new PDO('sqlite::memory:'));
+        $transaction = new ConflictingTransaction(conflicts: 1);
+
+        try {
+            $connection->transaction(fn(): string => $connection->runAgainOnConflict($transaction(...)));
+            $this->fail('The conflict should have been reported.');
+        } catch (PDOException) {
+        }
+
+        $this->assertSame(1, $transaction->attempts);
     }
 
     public function test_runs_each_schema_change_in_its_own_transaction(): void
