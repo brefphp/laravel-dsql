@@ -1,5 +1,7 @@
 # Aurora DSQL for Laravel
 
+**Full documentation here: [bref.sh/docs/environment/database-dsql](https://bref.sh/docs/environment/database-dsql)**
+
 Use [Amazon Aurora DSQL](https://aws.amazon.com/rds/aurora/dsql/) as the database of a Laravel application.
 
 This package adds a `dsql` database driver to Laravel: it authenticates with IAM, and adapts migrations and transactions to Aurora DSQL.
